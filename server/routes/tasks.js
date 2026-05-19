@@ -46,6 +46,49 @@ router.get('/lesson/:lessonId', async (req, res) => {
   }
 });
 
+router.get('/lesson-random/:lessonId/:count', async (req, res) => {
+  const { lessonId, count } = req.params;
+  const limit = parseInt(count) || 5;
+
+  try {
+    const result = await pool.query(`
+      SELECT 
+        t.task_id,
+        t.task_title,
+        t.task_description,
+        t.task_difficulty,
+        t.task_correct_answer,
+        t.task_hints,
+        t.task_max_attempts,
+        t.task_points,
+        t.task_created_at,
+        t.task_language,
+        t.task_type,
+        t.task_options
+      FROM tasks t
+      JOIN lessontasks lt ON t.task_id = lt.task_id
+      WHERE lt.lesson_id = $1
+      ORDER BY RANDOM()
+      LIMIT $2
+    `, [lessonId, limit]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Задания для этого урока не найдены' });
+    }
+
+    const tasks = result.rows.map(task => ({
+      ...task,
+      task_correct_answer: task.task_correct_answer?.trim() || '',
+      task_hints: Array.isArray(task.task_hints) ? task.task_hints : []
+    }));
+
+    res.json(tasks);
+  } catch (err) {
+    console.error('❌ Ошибка при получении случайных заданий урока:', err);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
 // POST /api/tasks/check
 router.post('/check', async (req, res) => {
   const { task_id, user_code } = req.body;

@@ -181,36 +181,77 @@ export default function ProfilePage() {
   return (
     <div className="absolute inset-0 bg-gray-900 text-white flex">
       {/* Боковая панель */}
-      <div className="w-20 bg-gray-800 flex flex-col items-center py-6 space-y-8 relative flex-shrink-0">
-        <Link to="/courses">
-          <div
-            className={`p-3 rounded-lg transition-all cursor-pointer ${
-              location.pathname === '/courses'
-                ? 'bg-purple-600'
-                : 'bg-gray-700 hover:bg-gray-600'
-            }`}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
-            </svg>
-          </div>
-        </Link>
+<div className="w-20 bg-gray-800 flex flex-col items-center py-6 space-y-8 relative flex-shrink-0">
+  {/* Кнопка "Курсы" */}
+  <Link to="/courses">
+    <div
+      className={`p-3 rounded-lg transition-all cursor-pointer ${
+        location.pathname === '/courses'
+          ? 'bg-purple-600'
+          : 'bg-gray-700 hover:bg-gray-600'
+      }`}
+      title="Курсы"
+    >
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"
+        />
+      </svg>
+    </div>
+  </Link>
 
-        <Link to="/profile">
-          <div
-            className={`p-3 rounded-lg transition-all cursor-pointer ${
-              location.pathname === '/profile'
-                ? 'bg-purple-600'
-                : 'bg-gray-700 hover:bg-gray-600'
-            }`}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
-        </Link>
-      </div>
+  {/* 🔻 НОВАЯ КНОПКА: Пользовательские курсы */}
+  <Link to="/custom-courses">
+    <div
+      className={`p-3 rounded-lg transition-all cursor-pointer ${
+        location.pathname === '/custom-courses'
+          ? 'bg-purple-600'
+          : 'bg-gray-700 hover:bg-gray-600'
+      }`}
+      title="Пользовательские курсы"
+    >
+      {/* Иконка: книга с пером (или альтернатива — просто книга) */}
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+        />
+      </svg>
+    </div>
+  </Link>
+
+  {/* Кнопка "Профиль" */}
+  <Link to="/profile">
+    <div
+      className={`p-3 rounded-lg transition-all cursor-pointer ${
+        location.pathname === '/profile'
+          ? 'bg-purple-600'
+          : 'bg-gray-700 hover:bg-gray-600'
+      }`}
+      title="Профиль"
+    >
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+        />
+      </svg>
+    </div>
+  </Link>
+</div>
 
       {/* Основная область */}
       <div className="flex-1 flex flex-col overflow-hidden">

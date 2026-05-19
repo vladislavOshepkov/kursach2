@@ -11,6 +11,7 @@ export default function LessonDetailPage() {
   const [showTasks, setShowTasks] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
+  const [userAnswers, setUserAnswers] = useState({}); // Ответы на вопросы
 
   // Для редактора кода
   const [code, setCode] = useState('');
@@ -35,28 +36,31 @@ export default function LessonDetailPage() {
     };
 
     const fetchTasks = async () => {
-      try {
-        const res = await fetch(`http://localhost:5000/api/tasks/lesson/${lessonId}`);
-        if (!res.ok) throw new Error('Задания не загружены');
-        const data = await res.json();
-        setTasks(data);
+  try {
+    const res = await fetch(`http://localhost:5000/api/tasks/lesson-random/${lessonId}/5`);
+    if (!res.ok) throw new Error('Задания не загружены');
+    const data = await res.json();
+    setTasks(data);
 
-        const initAttempts = {};
-        const initResults = {};
+    const initAttempts = {};
+    const initResults = {};
+    const initAnswers = {};
 
-        data.forEach((task, i) => {
-          initAttempts[i] = 0;
-          initResults[i] = null;
-        });
+    data.forEach((task, i) => {
+      initAttempts[i] = 0;
+      initResults[i] = null;
+      initAnswers[i] = task.task_type === 'multiple' ? [] : null;
+    });
 
-        setAttempts(initAttempts);
-        setResults(initResults);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+    setAttempts(initAttempts);
+    setResults(initResults);
+    setUserAnswers(initAnswers);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+};
 
     fetchLesson();
     fetchTasks();
@@ -115,39 +119,37 @@ useEffect(() => {
   };
 
   const handleSubmit = async (taskIndex) => {
-    const task = tasks[taskIndex];
-    const userAttempts = attempts[taskIndex];
+  const task = tasks[taskIndex];
+  const userAttempts = attempts[taskIndex];
 
-    if (userAttempts >= 3 || results[taskIndex] === 'correct') return;
+  if (userAttempts >= 3 || results[taskIndex] === 'correct') return;
 
-    try {
-      const res = await fetch('http://localhost:5000/api/tasks/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          task_id: task.task_id,
-          user_code: code.trim(),
-        }),
-      });
+  let isCorrect = false;
 
-      const data = await res.json();
+  if (task.task_type === 'single') {
+    const selected = userAnswers[taskIndex];
+    const correct = parseInt(task.task_correct_answer);
+    isCorrect = selected === correct;
+  } else if (task.task_type === 'multiple') {
+    const selected = [...(userAnswers[taskIndex] || [])].sort();
+    const correct = JSON.parse(task.task_correct_answer).sort();
+    isCorrect = JSON.stringify(selected) === JSON.stringify(correct);
+  }
 
-      setAttempts(prev => ({ ...prev, [taskIndex]: prev[taskIndex] + 1 }));
+  // Обновляем попытки и результат
+  setAttempts(prev => ({ ...prev, [taskIndex]: prev[taskIndex] + 1 }));
 
-      let newResult;
-      if (data.isCorrect) {
-        newResult = 'correct';
-      } else if (userAttempts + 1 >= 3) {
-        newResult = 'failed';
-      } else {
-        newResult = 'wrong';
-      }
+  let newResult;
+  if (isCorrect) {
+    newResult = 'correct';
+  } else if (userAttempts + 1 >= 3) {
+    newResult = 'failed';
+  } else {
+    newResult = 'wrong';
+  }
 
-      setResults(prev => ({ ...prev, [taskIndex]: newResult }));
-    } catch (err) {
-      console.error('Ошибка проверки:', err);
-    }
-  };
+  setResults(prev => ({ ...prev, [taskIndex]: newResult }));
+};
 
   const nextTask = () => {
     if (currentTaskIndex < tasks.length - 1) {
@@ -217,6 +219,7 @@ useEffect(() => {
         user_code: code.trim(),
       }),
     });
+    
 
     const checkData = await checkResponse.json();
 
@@ -257,6 +260,14 @@ useEffect(() => {
   const allCompleted = allFinished && tasks.every((_, i) => results[i] === 'correct');
   const showFailureScreen = allFinished && !allCompleted;
 
+  const parseOptions = (optionsStr) => {
+  try {
+    return optionsStr ? JSON.parse(optionsStr) : [];
+  } catch (err) {
+    console.error('❌ Ошибка парсинга task_options:', optionsStr);
+    return [];
+  }
+};
   return (
     <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
       {/* Боковая панель */}
@@ -283,10 +294,10 @@ useEffect(() => {
           {!showTasks ? (
             
              // Лекция из БД
-  <div className="prose prose-invert max-w-4xl mx-auto">
+  <div className="max-w-4xl mx-auto px-6">
     {lesson?.lesson_content ? (
       <div
-        className="prose prose-lg prose-invert max-w-4xl mx-auto"
+        className="prose prose-lg prose-invert"
         dangerouslySetInnerHTML={{ __html: lesson.lesson_content }}
       />
     ) : (
@@ -349,84 +360,157 @@ useEffect(() => {
               </h2>
 
               {currentTask && (
-                <div className="bg-gray-800 p-6 rounded-xl">
-                  <h3 className="text-lg font-semibold text-purple-300">
-                    {currentTask.task_title}
-                  </h3>
-                  <p className="text-gray-300 mt-2 mb-4">
-                    {currentTask.task_description}
-                  </p>
+  <div className="bg-gray-800 p-6 rounded-xl space-y-6">
+    <h3 className="text-lg font-semibold text-purple-300">{currentTask.task_title}</h3>
+    <p className="text-gray-300">{currentTask.task_description}</p>
 
-                 {/* Редактор кода */}
-<textarea
-  value={code}
-  onChange={(e) => setCode(e.target.value)}
-  placeholder="// Напишите код на C# здесь"
-  className="w-full h-40 bg-gray-700 text-white p-4 rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
-/>
+    {/* === Тип: Написание кода === */}
+    {currentTask.task_type === 'code' && (
+      <>
+        <textarea
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="// Напишите код на C# здесь"
+          className="w-full h-40 bg-gray-700 text-white p-4 rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
 
-{/* Кнопка "Выполнить" */}
-<button
-  onClick={handleRun}
-  disabled={isRunning || result === 'correct' || userAttempts >= 3}
-  className={`mt-4 px-5 py-2 rounded font-medium transition
-    ${isRunning
-      ? 'bg-gray-600 cursor-not-allowed'
-      : 'bg-blue-600 hover:bg-blue-700'
-    } text-white`}
->
-  {isRunning ? 'Выполняется...' : '▶ Выполнить'}
-</button>
+        <button
+          onClick={handleRun}
+          disabled={isRunning || result === 'correct' || userAttempts >= 3}
+          className={`mt-4 px-5 py-2 rounded font-medium transition
+            ${isRunning ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}
+            text-white`}
+        >
+          {isRunning ? 'Выполняется...' : '▶ Выполнить'}
+        </button>
 
-{/* Вывод */}
-{output && (
-  <div className="mt-4 p-4 bg-gray-700 rounded-lg text-sm font-mono whitespace-pre-wrap">
-    <strong>Вывод:</strong>
-    <pre className="text-green-300 mt-1">{output}</pre>
+        {output && (
+          <div className="mt-4 p-4 bg-gray-700 rounded-lg text-sm font-mono whitespace-pre-wrap">
+            <strong>Вывод:</strong>
+            <pre className="text-green-300 mt-1">{output}</pre>
+          </div>
+        )}
+      </>
+    )}
+
+    {currentTask.task_type === 'single' && (
+  <div className="space-y-4 mt-2">
+    {parseOptions(currentTask.task_options).map((option, idx) => {
+      const isSelected = userAnswers[currentTaskIndex] === idx;
+
+      return (
+        <label
+          key={idx}
+          onClick={() => setUserAnswers(prev => ({ ...prev, [currentTaskIndex]: idx }))}
+          className={`flex items-center justify-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 text-center
+            ${isSelected 
+              ? 'border-purple-500 bg-gray-800 shadow-lg shadow-purple-500/20' 
+              : 'border-gray-700 hover:border-gray-600 bg-gray-900'
+            }`}
+        >
+          {/* Кастомный radiobutton */}
+          <div className="relative flex-shrink-0 w-6 h-6 mr-4">
+            <div
+              className={`w-full h-full rounded-full border-2 transition-colors duration-200
+                ${isSelected ? 'border-purple-300' : 'border-gray-400'}
+              `}
+            ></div>
+            {isSelected && (
+              <div className="absolute inset-1.5 bg-purple-300 rounded-full"></div>
+            )}
+          </div>
+
+          {/* Текст ответа */}
+          <span className="text-gray-200 font-medium">{option}</span>
+        </label>
+      );
+    })}
   </div>
 )}
 
-{/* Результат */}
-{/* Результат */}
-{result === 'correct' && (
-  <div className="mt-4 space-y-3">
-    <p className="text-green-400">✅ Правильно! Молодец!</p>
-    {currentTaskIndex < tasks.length - 1 ? (
-      <button
-        onClick={nextTask}
-        className="px-5 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg font-medium transition transform hover:scale-105"
-      >
-        🚀 Следующее задание
-      </button>
-    ) : (
-      <p className="text-blue-400">🎉 Поздравляем! Вы выполнили все задания.</p>
+    {currentTask.task_type === 'multiple' && (
+  <div className="space-y-4 mt-2">
+    {parseOptions(currentTask.task_options).map((option, idx) => {
+      const isSelected = Array.isArray(userAnswers[currentTaskIndex])
+        ? userAnswers[currentTaskIndex].includes(idx)
+        : false;
+
+      return (
+        <label
+          key={idx}
+          onClick={(e) => {
+            e.preventDefault();
+            const current = userAnswers[currentTaskIndex] || [];
+            const updated = isSelected
+              ? current.filter(i => i !== idx)
+              : [...current, idx];
+            setUserAnswers(prev => ({ ...prev, [currentTaskIndex]: updated }));
+          }}
+          className={`flex items-center justify-center p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 text-center
+            ${isSelected 
+              ? 'border-purple-500 bg-gray-800 shadow-lg shadow-purple-500/20' 
+              : 'border-gray-700 hover:border-gray-600 bg-gray-900'
+            }`}
+        >
+          {/* Кастомный checkbox (в виде круга) */}
+          <div className="relative flex-shrink-0 w-6 h-6 mr-4">
+            <div
+              className={`w-full h-full rounded-full border-2 transition-colors duration-200
+                ${isSelected ? 'border-purple-300 bg-transparent' : 'border-gray-400'}
+              `}
+            ></div>
+            {isSelected && (
+              <div className="absolute inset-1.5 bg-purple-300 rounded-full"></div>
+            )}
+          </div>
+
+          {/* Текст ответа */}
+          <span className="text-gray-200 font-medium">{option}</span>
+        </label>
+      );
+    })}
+  </div>
+)}
+
+    {currentTask.task_type !== 'code' && result !== 'correct' && userAttempts < 3 && (
+  <button
+    onClick={() => handleSubmit(currentTaskIndex)}
+    className="mt-4 px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition"
+  >
+    {userAttempts === 0 ? 'Проверить ответ' : `Попробовать снова`}
+  </button>
+)}
+
+    {/* Результат */}
+    {result === 'correct' && (
+      <div className="mt-4 space-y-3">
+        <p className="text-green-400">✅ Правильно! Молодец!</p>
+        {currentTaskIndex < tasks.length - 1 ? (
+          <button
+            onClick={nextTask}
+            className="px-5 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg font-medium transition transform hover:scale-105"
+          >
+            🚀 Следующее задание
+          </button>
+        ) : (
+          <p className="text-blue-400">🎉 Поздравляем! Вы выполнили все задания.</p>
+        )}
+      </div>
+    )}
+
+    {result === 'wrong' && (
+      <p className="text-yellow-400 mt-2">
+        ❌ Неверно. Осталось попыток: {3 - userAttempts}
+      </p>
+    )}
+
+    {result === 'failed' && (
+      <p className="text-red-400 mt-2">
+        ❌ Все попытки исчерпаны.
+      </p>
     )}
   </div>
 )}
-
-{result === 'wrong' && (
-  <p className="text-yellow-400 mt-2">
-    ❌ Неверно. Осталось попыток: {3 - userAttempts}
-  </p>
-)}
-
-{result === 'failed' && (
-  <p className="text-red-400 mt-2">
-    ❌ Все попытки исчерпаны.
-  </p>
-)}
-{result === 'wrong' && (
-  <p className="text-yellow-400 mt-2">
-    ❌ Неверно. Осталось попыток: {3 - userAttempts}
-  </p>
-)}
-{result === 'failed' && (
-  <p className="text-red-400 mt-2">
-    ❌ Все попытки исчерпаны.
-  </p>
-)}
-                </div>
-              )}
             </div>
           )}
         </main>

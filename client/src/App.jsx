@@ -4,6 +4,7 @@ import CoursesPage from './pages/CoursesPage';
 import LessonsPage from './pages/LessonsPage';
 import LessonDetailPage from './pages/LessonDetailPage';
 import ProfilePage from './pages/ProfilePage';
+import CustomCoursesPage from './pages/CustomCoursesPage';
 import './index.css';
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/course/:courseId/lessons" element={<LessonsPage />} />
         <Route path="/lesson/:lessonId" element={<LessonDetailPage />} />
+        <Route path="/custom-courses" element={<CustomCoursesPage />} />
       </Routes>
     </BrowserRouter>
   );
