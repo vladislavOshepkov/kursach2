@@ -58,6 +58,7 @@ export default function AuthPage() {
       if (!isLogin) setIsLogin(true);
       if (data.token) localStorage.setItem('token', data.token);
       localStorage.setItem('userId', data.user.user_id);
+      localStorage.setItem('userRole', data.user.role_id);
       navigate('/courses');
     } else {
       alert('❌ Ошибка: ' + data.message);

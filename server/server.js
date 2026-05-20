@@ -12,6 +12,7 @@ import singleLessonRoute from './routes/lesson.js';
 import progressRouter from './routes/progress.js';
 import languageRoutes from './routes/languages.js';
 import taskRoutes from './routes/tasks.js';
+import customCourses from './routes/customCourses.js';
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.use('/api/lesson', singleLessonRoute);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/progress', progressRouter);
 app.use('/api/languages', languageRoutes);
+app.use('/api/custom-courses', customCourses);
 
 app.get('/', (req, res) => {
   res.send('Сервер работает! 🚀');
