@@ -3,16 +3,22 @@ import { useNavigate } from 'react-router-dom';
 
 export default function CustomCoursesPage() {
   const [courses, setCourses] = useState([]);
+  const [allCourses, setAllCourses] = useState([]); // все курсы
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState('1');
-  const [isModalOpen, setIsModalOpen] = useState(false); // Управление модалкой
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showMyCourses, setShowMyCourses] = useState(false);
+
+  // 🔎 Фильтры
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTag, setSelectedTag] = useState('');
+  const [availableTags, setAvailableTags] = useState([]);
 
   const navigate = useNavigate();
+  const userId = localStorage.getItem('userId');
 
   useEffect(() => {
-    const role = localStorage.getItem('userRole') || 
-                 localStorage.getItem('role') || 
-                 '1';
+    const role = localStorage.getItem('userRole') || localStorage.getItem('role') || '1';
     setUserRole(role);
     fetchCourses();
   }, []);
@@ -22,12 +28,84 @@ export default function CustomCoursesPage() {
       const res = await fetch('http://localhost:5000/api/custom-courses');
       if (!res.ok) throw new Error('Не удалось загрузить курсы');
       const data = await res.json();
+
+      setAllCourses(data);
       setCourses(data);
+
+      // 🏷️ Собираем уникальные теги из всех курсов
+      const tags = new Set();
+      data.forEach(course => {
+        if (Array.isArray(course.course_tags)) {
+          course.course_tags.forEach(tag => tags.add(tag.trim()));
+        }
+      });
+      setAvailableTags([...tags].sort());
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleMyCourses = () => {
+    let filtered = allCourses;
+
+    if (!showMyCourses) {
+      filtered = filtered.filter(course => course.user_id?.toString() === userId);
+    }
+
+    // Применяем текущие фильтры
+    applyFilters(filtered, searchTerm, selectedTag);
+    setShowMyCourses(!showMyCourses);
+  };
+
+  // 🔍 Применение фильтров
+  const applyFilters = (coursesList = allCourses, term = searchTerm, tag = selectedTag) => {
+    let result = [...coursesList];
+
+    // Поиск по названию и описанию
+    if (term) {
+      const lowerTerm = term.toLowerCase();
+      result = result.filter(course =>
+        course.course_title.toLowerCase().includes(lowerTerm) ||
+        (course.course_description && course.course_description.toLowerCase().includes(lowerTerm))
+      );
+    }
+
+    // Фильтр по тегу
+    if (tag) {
+      result = result.filter(course =>
+        Array.isArray(course.course_tags) &&
+        course.course_tags.map(t => t.trim()).includes(tag)
+      );
+    }
+
+    setCourses(result);
+  };
+
+  // Обработчики изменений
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    applyFilters(showMyCourses 
+      ? allCourses.filter(c => c.user_id?.toString() === userId)
+      : allCourses, value, selectedTag);
+  };
+
+  const handleTagChange = (e) => {
+    const tag = e.target.value;
+    setSelectedTag(tag);
+    applyFilters(showMyCourses 
+      ? allCourses.filter(c => c.user_id?.toString() === userId)
+      : allCourses, searchTerm, tag);
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setSelectedTag('');
+    applyFilters(showMyCourses 
+      ? allCourses.filter(c => c.user_id?.toString() === userId)
+      : allCourses, '', '');
   };
 
   const formatDate = (dateString) => {
@@ -38,7 +116,6 @@ export default function CustomCoursesPage() {
     });
   };
 
-  // --- Модальное окно создания курса ---
   return (
     <div className="flex h-screen bg-gray-900 text-white">
       {/* Боковая панель */}
@@ -62,23 +139,73 @@ export default function CustomCoursesPage() {
         </header>
 
         <main className="flex-1 p-6 bg-gray-900 overflow-y-auto">
-          {/* Кнопка "Создать курс" — только для преподавателя */}
-          {userRole === '2' && (
-            <div className="mb-8">
+          {/* Фильтры */}
+          <div className="flex flex-wrap gap-4 mb-8 items-end">
+            {/* Кнопка "Создать курс" — только для преподавателя */}
+            {userRole === '2' && (
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-lg font-medium shadow-lg transform hover:scale-105 transition"
+                className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-lg font-medium shadow-lg transform hover:scale-105 transition whitespace-nowrap"
               >
                 ➕ Создать курс
               </button>
+            )}
+
+            {/* Кнопка "Мои / Все курсы" */}
+            <button
+              onClick={toggleMyCourses}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium shadow transition whitespace-nowrap"
+            >
+              {showMyCourses ? '🌐 Все курсы' : '👤 Мои курсы'}
+            </button>
+
+            {/* Поиск по названию/описанию */}
+            <div className="flex-1 min-w-48">
+              <label className="block text-sm font-medium text-gray-300 mb-1">Поиск</label>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                placeholder="Название или описание..."
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder-gray-400"
+              />
             </div>
-          )}
+
+            {/* Фильтр по тегам */}
+            <div className="min-w-48">
+              <label className="block text-sm font-medium text-gray-300 mb-1">Тег</label>
+              <select
+                value={selectedTag}
+                onChange={handleTagChange}
+                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+              >
+                <option value="">Все теги</option>
+                {availableTags.map(tag => (
+                  <option key={tag} value={tag}>{tag}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Сброс */}
+            {(searchTerm || selectedTag) && (
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg font-medium transition self-end"
+              >
+                🗑️ Сброс
+              </button>
+            )}
+          </div>
 
           {/* Список курсов */}
           {loading ? (
             <p>Загрузка...</p>
           ) : courses.length === 0 ? (
-            <p className="text-gray-500">Пока нет ни одного пользовательского курса.</p>
+            <p className="text-gray-500">
+              {showMyCourses
+                ? 'Вы ещё не создали ни одного курса.'
+                : 'Пока нет ни одного пользовательского курса.'}
+            </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {courses.map((course) => (
@@ -105,8 +232,15 @@ export default function CustomCoursesPage() {
 
                   <div className="flex flex-wrap gap-2 mb-4">
                     {course.course_tags?.slice(0, 3).map((tag, i) => (
-                      <span key={i} className="px-2 py-1 bg-gray-700 text-xs rounded-full text-gray-300">
-                        {tag}
+                      <span
+                        key={i}
+                        className={`px-2 py-1 text-xs rounded-full ${
+                          selectedTag === tag.trim()
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-gray-700 text-gray-300'
+                        }`}
+                      >
+                        {tag.trim()}
                       </span>
                     ))}
                   </div>
@@ -121,13 +255,13 @@ export default function CustomCoursesPage() {
         </main>
       </div>
 
-      {/* 🔹 МОДАЛЬНОЕ ОКНО СОЗДАНИЯ КУРСА */}
+      {/* Модальное окно создания курса */}
       {isModalOpen && <CreateCourseModal onClose={() => setIsModalOpen(false)} onSuccess={fetchCourses} />}
     </div>
   );
 }
 
-// --- Внешний компонент модалки ---
+// --- Компонент модалки ---
 function CreateCourseModal({ onClose, onSuccess }) {
   const [formData, setFormData] = useState({
     course_title: '',
@@ -135,6 +269,7 @@ function CreateCourseModal({ onClose, onSuccess }) {
     course_icon_url: '/icons/course-default.svg',
     course_tags: '',
   });
+  const [fileToUpload, setFileToUpload] = useState(null); // ✅ Добавлено сюда
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -160,27 +295,31 @@ function CreateCourseModal({ onClose, onSuccess }) {
       return;
     }
 
-    const payload = {
-      ...formData,
-      course_tags: tags,
-      user_id: parseInt(userId, 10),
-    };
+    const formDataToSend = new FormData();
+formDataToSend.append('course_title', formData.course_title);
+formDataToSend.append('course_description', formData.course_description);
+formDataToSend.append('user_id', userId);
+tags.forEach(tag => {
+  formDataToSend.append('course_tags', tag);
+});
+if (fileToUpload) {
+  formDataToSend.append('course_icon', fileToUpload);
+}
 
     try {
-      const res = await fetch('http://localhost:5000/api/custom-courses', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(`http://localhost:5000/api/custom-courses`, {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${localStorage.getItem('token')}`,
+  },
+  body: formDataToSend,
+});
 
       const data = await res.json();
 
       if (res.ok) {
-        onSuccess(); // Обновляем список курсов
-        onClose(); // Закрываем модалку
+        onSuccess();
+        onClose();
       } else {
         throw new Error(data.message || 'Не удалось создать курс');
       }
@@ -196,19 +335,12 @@ function CreateCourseModal({ onClose, onSuccess }) {
       <div className="bg-gray-800 rounded-2xl w-full max-w-lg shadow-2xl border border-gray-700 max-h-screen overflow-y-auto">
         <div className="flex justify-between items-center p-6 border-b border-gray-700">
           <h2 className="text-2xl font-bold text-white">Создать курс</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl leading-none"
-          >
-            &times;
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {error && (
-            <div className="p-3 bg-red-900/50 text-red-200 text-sm rounded-lg">
-              {error}
-            </div>
+            <div className="p-3 bg-red-900/50 text-red-200 text-sm rounded-lg">{error}</div>
           )}
 
           <div>
@@ -237,16 +369,34 @@ function CreateCourseModal({ onClose, onSuccess }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Ссылка на иконку (URL)</label>
-            <input
-              type="url"
-              name="course_icon_url"
-              value={formData.course_icon_url}
-              onChange={handleChange}
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder-gray-400"
-              placeholder="https://example.com/icon.png"
-            />
-          </div>
+  <label className="block text-sm font-medium text-gray-300 mb-1">Иконка курса</label>
+  <input
+    type="file"
+    accept="image/*"
+    onChange={(e) => {
+      const file = e.target.files[0];
+      if (file) {
+        // Для предпросмотра можно использовать URL.createObjectURL
+        const previewUrl = URL.createObjectURL(file);
+        setFormData((prev) => ({ ...prev, course_icon_url: previewUrl }));
+        setFileToUpload(file); // Сохраняем файл для отправки
+      }
+    }}
+    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-purple-600 file:text-white hover:file:bg-purple-700"
+  />
+</div>
+
+{/* Предпросмотр */}
+{formData.course_icon_url && (
+  <div className="mt-3">
+    <p className="text-sm text-gray-400 mb-1">Предпросмотр:</p>
+    <img
+      src={formData.course_icon_url}
+      alt="Предпросмотр иконки"
+      className="w-16 h-16 object-cover rounded-lg border border-gray-600"
+    />
+  </div>
+)}
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Теги (через запятую)</label>

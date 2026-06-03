@@ -5,6 +5,8 @@ import LessonsPage from './pages/LessonsPage';
 import LessonDetailPage from './pages/LessonDetailPage';
 import ProfilePage from './pages/ProfilePage';
 import CustomCoursesPage from './pages/CustomCoursesPage';
+import CustomCoursePage from './pages/CustomCoursePage';
+import CustomLessonPage from './pages/CustomLessonPage';
 import './index.css';
 
 export default function App() {
@@ -17,6 +19,8 @@ export default function App() {
         <Route path="/course/:courseId/lessons" element={<LessonsPage />} />
         <Route path="/lesson/:lessonId" element={<LessonDetailPage />} />
         <Route path="/custom-courses" element={<CustomCoursesPage />} />
+        <Route path="/custom-course/:id" element={<CustomCoursePage />} />
+        <Route path="/custom-lessons/:id" element={<CustomLessonPage />} />
       </Routes>
     </BrowserRouter>
   );
