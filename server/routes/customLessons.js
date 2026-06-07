@@ -51,12 +51,15 @@ router.put('/:id', async (req, res) => {
   try {
     const result = await pool.query(
       `UPDATE custom_lessons
-       SET lesson_title = $1,
-           lesson_description = $2,
-           lesson_content = $3,
-           lesson_estimated_time = $4
-       WHERE lesson_id = $5
-       RETURNING *`,
+SET lesson_title = $1,
+    lesson_description = $2,
+    lesson_content = $3,
+    lesson_estimated_time = $4,
+    attempt_mode = COALESCE($5, attempt_mode),
+    max_attempts = CASE WHEN $5 = 'limited' THEN $6 ELSE NULL END,
+    show_count = COALESCE($7, show_count)
+WHERE lesson_id = $8
+RETURNING *`,
       [lesson_title, lesson_description, lesson_content, lesson_estimated_time, lessonId]
     );
 

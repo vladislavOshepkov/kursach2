@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import CustomTaskRenderer from '../components/CustomTaskRenderer';
 
 export default function CustomLessonPage() {
   const { id } = useParams(); // lesson_id
@@ -8,37 +9,72 @@ export default function CustomLessonPage() {
   const [lesson, setLesson] = useState(null);
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showTasks, setShowTasks] = useState(false); // ← новое состояние
+  const [tasks, setTasks] = useState([]); 
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
+  const [userAnswers, setUserAnswers] = useState({});
+  const [attempts, setAttempts] = useState({});
+  const [results, setResults] = useState({});
+
+  const [code, setCode] = useState('');
+  const [output, setOutput] = useState('');
+  const [isRunning, setIsRunning] = useState(false);
 
   const userId = localStorage.getItem('userId');
+  const startTime = Date.now();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
 
   useEffect(() => {
-    const fetchLesson = async () => {
-      try {
-        // Загружаем урок
-        const resLesson = await fetch(`http://localhost:5000/api/custom-lessons/${id}`);
-        if (!resLesson.ok) throw new Error('Урок не найден');
-        const dataLesson = await resLesson.json();
-        setLesson(dataLesson);
+  const fetchLesson = async () => {
+    try {
+      const resLesson = await fetch(`http://localhost:5000/api/custom-lessons/${id}`);
+      if (!resLesson.ok) throw new Error('Урок не найден');
+      const dataLesson = await resLesson.json();
+      setLesson(dataLesson);
 
-        // Загружаем данные курса
-        const resCourse = await fetch(`http://localhost:5000/api/custom-courses/${dataLesson.course_id}`);
-        if (!resCourse.ok) throw new Error('Курс не найден');
-        const dataCourse = await resCourse.json();
-        setCourse(dataCourse);
-      } catch (err) {
-        console.error(err);
-        alert('❌ ' + err.message);
-        navigate(-1);
-      } finally {
-        setLoading(false);
+      // Загрузка курса
+      const resCourse = await fetch(`http://localhost:5000/api/custom-courses/${dataLesson.course_id}`);
+      if (!resCourse.ok) throw new Error('Курс не найден');
+      const dataCourse = await resCourse.json();
+      setCourse(dataCourse);
+
+      // 🔹 Загрузка ВСЕХ заданий и фильтрация по show_count
+      const resTasks = await fetch(`http://localhost:5000/api/custom-tasks?lesson_id=${dataLesson.lesson_id}`);
+      if (resTasks.ok) {
+        const allTasks = await resTasks.json();
+        const showCount = dataLesson.show_count || 0;
+        const selectedTasks = showCount > 0 && showCount < allTasks.length
+          ? allTasks.sort(() => 0.5 - Math.random()).slice(0, showCount)
+          : allTasks;
+        setTasks(selectedTasks);
+
+        // Инициализация состояний
+        const initAnswers = {};
+        const initAttempts = {};
+        const initResults = {};
+        selectedTasks.forEach((task, i) => {
+          initAnswers[i] = task.type === 'multiple' ? [] : null;
+          initAttempts[i] = 0;
+          initResults[i] = null;
+        });
+        setUserAnswers(initAnswers);
+        setAttempts(initAttempts);
+        setResults(initResults);
       }
-    };
 
-    fetchLesson();
-  }, [id, navigate]);
+    } catch (err) {
+      console.error(err);
+      alert('❌ ' + err.message);
+      navigate(-1);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchLesson();
+}, [id, navigate]);
 
   const isAuthor = lesson && userId === course?.user_id?.toString();
 
@@ -49,6 +85,150 @@ export default function CustomLessonPage() {
       year: 'numeric'
     });
   };
+
+  const handleStartTasks = () => {
+  setShowTasks(true);
+  setCode('');
+};
+
+const handleSubmit = async (taskIndex) => {
+  const task = tasks[taskIndex];
+  const userAttempts = attempts[taskIndex];
+
+  if (userAttempts >= 3 || results[taskIndex] === 'correct') return;
+
+  let isCorrect = false;
+
+  if (task.type === 'single') {
+    const selected = userAnswers[taskIndex];
+    const correct = parseInt(task.correct_answers);
+    isCorrect = selected === correct;
+  } else if (task.type === 'multiple') {
+    const selected = [...(userAnswers[taskIndex] || [])].sort();
+    const correct = JSON.parse(task.correct_answers || '[]').sort();
+    isCorrect = JSON.stringify(selected) === JSON.stringify(correct);
+  }
+
+  setAttempts(prev => ({ ...prev, [taskIndex]: prev[taskIndex] + 1 }));
+
+  let newResult;
+  if (isCorrect) {
+    newResult = 'correct';
+  } else if (userAttempts + 1 >= 3) {
+    newResult = 'failed';
+  } else {
+    newResult = 'wrong';
+  }
+
+  setResults(prev => ({ ...prev, [taskIndex]: newResult }));
+};
+
+const handleCustomTaskSubmit = async (taskIndex) => {
+  const task = tasks[taskIndex];
+  const currentAttempts = attempts[taskIndex] || 0;
+
+  if (currentAttempts >= 3 || results[taskIndex] === 'correct') return;
+
+  let isCorrect = false;
+
+  // 🔁 Универсальная проверка
+  if (task.type === 'single') {
+    const selected = String(userAnswers[taskIndex]);
+
+    // correctAnswers может быть строкой, массивом или JSON-строкой
+    let correctAnswersList;
+    if (typeof task.correct_answers === 'string') {
+      try {
+        correctAnswersList = JSON.parse(task.correct_answers);
+        if (!Array.isArray(correctAnswersList)) {
+          correctAnswersList = [correctAnswersList];
+        }
+      } catch {
+        correctAnswersList = [task.correct_answers];
+      }
+    } else if (Array.isArray(task.correct_answers)) {
+      correctAnswersList = task.correct_answers;
+    } else {
+      correctAnswersList = [task.correct_answers];
+    }
+
+    const correct = String(correctAnswersList[0]);
+
+    console.log('✅ [single] selected:', selected, '| correct:', correct);
+    isCorrect = selected === correct;
+  } else if (task.type === 'multiple') {
+    const selected = [...(userAnswers[taskIndex] || [])].map(String).sort();
+    let correctAnswersList;
+    if (typeof task.correct_answers === 'string') {
+      try {
+        correctAnswersList = JSON.parse(task.correct_answers);
+      } catch {
+        correctAnswersList = [];
+      }
+    } else if (Array.isArray(task.correct_answers)) {
+      correctAnswersList = task.correct_answers;
+    } else {
+      correctAnswersList = [];
+    }
+    const correct = correctAnswersList.map(String).sort();
+
+    isCorrect = JSON.stringify(selected) === JSON.stringify(correct);
+  } else if (task.type === 'code') {
+    const userCode = code.trim();
+    const correctCode = (task.answer || '').trim();
+    isCorrect = userCode === correctCode;
+  }
+
+  console.log('🔍 [handleCustomTaskSubmit] ✅');
+  console.log('taskIndex:', taskIndex);
+  console.log('task.type:', task.type);
+  console.log('userAnswers[taskIndex]:', userAnswers[taskIndex]);
+  console.log('userAnswers (stringified):', JSON.stringify(userAnswers[taskIndex]));
+  console.log('correct_answers:', task.correct_answers);
+  console.log('isCorrect:', isCorrect);
+
+  if (!isCorrect) {
+    console.log('❌ НЕСОВПАДЕНИЕ');
+  }
+
+  // Обновляем попытки
+  setAttempts(prev => ({ ...prev, [taskIndex]: currentAttempts + 1 }));
+
+  // Определяем результат
+  let newResult;
+  if (isCorrect) {
+    newResult = 'correct';
+  } else if (currentAttempts + 1 >= 3) {
+    newResult = 'failed';
+  } else {
+    newResult = 'wrong';
+  }
+
+  setResults(prev => ({ ...prev, [taskIndex]: newResult }));
+};
+
+const nextTask = () => {
+  if (currentTaskIndex < tasks.length - 1) {
+    setCurrentTaskIndex(prev => prev + 1);
+    setCode('');
+  }
+};
+
+const restartLesson = () => {
+  setCurrentTaskIndex(0);
+  setCode('');
+  setAttempts({});
+  setResults({});
+  const initAttempts = {};
+  const initResults = {};
+  tasks.forEach((task, i) => {
+    initAttempts[i] = 0;
+    initResults[i] = null;
+  });
+  setAttempts(initAttempts);
+  setResults(initResults);
+  setShowTasks(false);
+};
 
   // Модальное окно редактирования урока
   const [editFormData, setEditFormData] = useState({
@@ -189,13 +369,17 @@ function CreateTaskModal({ lessonId, onClose, onSuccess }) {
 
     // Определяем правильные ответы в зависимости от типа
     let correctAnswersValue;
-    if (taskType === 'single') {
-      correctAnswersValue = correctOptions[0] !== undefined ? correctOptions[0].toString() : null;
-    } else if (taskType === 'multiple') {
-      correctAnswersValue = correctOptions.map(String);
-    } else {
-      correctAnswersValue = null;
-    }
+if (taskType === 'single') {
+  // Найти индекс выбранного варианта
+  const correctIndex = options.findIndex(opt => opt.id === correctOptions[0]);
+  correctAnswersValue = correctIndex !== -1 ? correctIndex.toString() : null;
+} else if (taskType === 'multiple') {
+  // Для множественного выбора — массив индексов
+  correctAnswersValue = correctOptions
+    .map(id => options.findIndex(opt => opt.id === id))
+    .filter(idx => idx !== -1)
+    .map(String);
+}
 
     try {
       const res = await fetch('http://localhost:5000/api/custom-tasks', {
@@ -470,11 +654,91 @@ function CreateTaskModal({ lessonId, onClose, onSuccess }) {
 
           {/* Контент урока */}
           <main className="flex-1 p-6 bg-gray-900 overflow-y-auto">
-            <h2 className="text-xl font-semibold mb-4">Содержание</h2>
-            <div className="prose max-w-none p-6 bg-gray-800 rounded-xl border border-gray-700 whitespace-pre-wrap">
-              {lesson.lesson_content || 'Контент отсутствует.'}
-            </div>
-          </main>
+  {!showTasks ? (
+    // 🔸 ТЕКСТ УРОКА
+    <div className="max-w-4xl mx-auto px-6">
+      <div
+        className="prose prose-lg prose-invert max-w-none"
+        dangerouslySetInnerHTML={{
+          __html: lesson.lesson_content || '<p>Контент отсутствует.</p>'
+        }}
+      />
+      <div className="mt-8 text-center">
+        <button
+          onClick={handleStartTasks}
+          disabled={tasks.length === 0}
+          className={`px-6 py-4 rounded-xl font-bold shadow-lg transition
+            ${tasks.length === 0
+              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+              : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 transform hover:scale-105'
+            }`}
+        >
+          🚀 Начать задания
+        </button>
+        {tasks.length === 0 && (
+          <p className="mt-2 text-gray-400 text-sm">Нет заданий для прохождения</p>
+        )}
+      </div>
+    </div>
+  ) : (
+    // 🔹 РЕНДЕР ОДНОГО ЗАДАНИЯ
+    <div className="max-w-4xl mx-auto px-6">
+      {currentTaskIndex < tasks.length ? (
+        <>
+          <h2 className="text-2xl font-bold text-center mb-6">
+            Задание {currentTaskIndex + 1} из {tasks.length}
+          </h2>
+
+          <CustomTaskRenderer
+            key={currentTaskIndex}
+            task={tasks[currentTaskIndex]}
+            index={currentTaskIndex}
+            totalTasks={tasks.length}
+            setShowTasks={setShowTasks}
+            userAnswers={userAnswers}
+            setUserAnswers={setUserAnswers}
+            attempts={attempts}
+            setAttempts={setAttempts}
+            results={results}
+            setResults={setResults}
+            userCode={code}
+            setUserCode={setCode}
+            output={output}
+            setOutput={setOutput}
+            isRunning={isRunning}
+            setIsRunning={setIsRunning}
+            handleStartTasks={handleStartTasks}
+            nextTask={nextTask}
+            handleSubmit={handleCustomTaskSubmit}
+            restartLesson={restartLesson}
+            goToLessons={() => navigate(-1)}
+          />
+        </>
+      ) : (
+        // ✅ Все задания пройдены
+        <div className="flex flex-col items-center justify-center h-full text-center space-y-8">
+          <div className="text-8xl">🏆</div>
+          <h2 className="text-4xl font-bold text-green-400">Урок завершён!</h2>
+          <p className="text-gray-300 text-lg">Поздравляем, вы успешно прошли все задания.</p>
+          <div className="flex gap-6 mt-6">
+            <button
+              onClick={restartLesson}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition"
+            >
+              Пройти заново
+            </button>
+            <button
+              onClick={goToLessons}
+              className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition"
+            >
+              Вернуться к урокам
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )}
+</main>
         </div>
       </div>
 
