@@ -15,6 +15,7 @@ import taskRoutes from './routes/tasks.js';
 import customCourses from './routes/customCourses.js';
 import customLessons from './routes/customLessons.js';
 import customTasks from './routes/customTasks.js';
+import customProgress from './routes/customProgress.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -40,6 +41,7 @@ app.use('/api/languages', languageRoutes);
 app.use('/api/custom-courses', customCourses);
 app.use('/api/custom-lessons', customLessons);
 app.use('/api/custom-tasks', customTasks);
+app.use('/api/custom-progress', customProgress);
 app.use('/uploads', express.static(path.join(__dirname, 'server', 'public', 'uploads')));
 app.use('/icons', express.static(path.join(__dirname, 'server', 'public', 'icons')));
 

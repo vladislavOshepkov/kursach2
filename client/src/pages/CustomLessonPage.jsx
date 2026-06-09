@@ -64,6 +64,14 @@ export default function CustomLessonPage() {
         setResults(initResults);
       }
 
+       if (userId && dataLesson.lesson_id) {
+        await fetch('http://localhost:5000/api/custom-progress/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, lesson_id: dataLesson.lesson_id }),
+        });
+      }
+
     } catch (err) {
       console.error(err);
       alert('❌ ' + err.message);
@@ -77,6 +85,11 @@ export default function CustomLessonPage() {
 }, [id, navigate]);
 
   const isAuthor = lesson && userId === course?.user_id?.toString();
+  const allCompleted = tasks.length > 0 && tasks.every((_, i) => results[i] === 'correct');
+const allFinished = tasks.length > 0 && tasks.every((_, i) => 
+  results[i] === 'correct' || results[i] === 'failed'
+);
+const showFailureScreen = allFinished && !allCompleted;
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('ru-RU', {
@@ -87,6 +100,23 @@ export default function CustomLessonPage() {
   };
 
   const handleStartTasks = () => {
+
+    const initAnswers = {};
+  const initAttempts = {};
+  const initResults = {};
+  tasks.forEach((task, i) => {
+    initAnswers[i] = task.type === 'multiple' ? [] : null;
+    initAttempts[i] = 0;
+    initResults[i] = null;
+  });
+  setUserAnswers(initAnswers);
+  setAttempts(initAttempts);
+  setResults(initResults);
+
+  setCurrentTaskIndex(0);
+  setShowTasks(true);
+  setCode('');
+
   setShowTasks(true);
   setCode('');
 };
@@ -127,15 +157,15 @@ const handleCustomTaskSubmit = async (taskIndex) => {
   const task = tasks[taskIndex];
   const currentAttempts = attempts[taskIndex] || 0;
 
+  // Блокируем повторную отправку, если попыток > 3 или результат уже «correct»
   if (currentAttempts >= 3 || results[taskIndex] === 'correct') return;
 
   let isCorrect = false;
 
-  // 🔁 Универсальная проверка
+  // 🔁 Универсальная проверка ответов
   if (task.type === 'single') {
     const selected = String(userAnswers[taskIndex]);
 
-    // correctAnswers может быть строкой, массивом или JSON-строкой
     let correctAnswersList;
     if (typeof task.correct_answers === 'string') {
       try {
@@ -153,11 +183,13 @@ const handleCustomTaskSubmit = async (taskIndex) => {
     }
 
     const correct = String(correctAnswersList[0]);
-
     console.log('✅ [single] selected:', selected, '| correct:', correct);
     isCorrect = selected === correct;
   } else if (task.type === 'multiple') {
-    const selected = [...(userAnswers[taskIndex] || [])].map(String).sort();
+    const selected = [...(userAnswers[taskIndex] || [])]
+      .map(String)
+      .sort();
+    
     let correctAnswersList;
     if (typeof task.correct_answers === 'string') {
       try {
@@ -170,41 +202,93 @@ const handleCustomTaskSubmit = async (taskIndex) => {
     } else {
       correctAnswersList = [];
     }
-    const correct = correctAnswersList.map(String).sort();
 
+    const correct = correctAnswersList
+      .map(String)
+      .sort();
+
+    console.log('✅ [multiple] selected:', selected, '| correct:', correct);
     isCorrect = JSON.stringify(selected) === JSON.stringify(correct);
   } else if (task.type === 'code') {
     const userCode = code.trim();
     const correctCode = (task.answer || '').trim();
-    isCorrect = userCode === correctCode;
+
+    try {
+      const res = await fetch('http://localhost:5000/api/custom-tasks/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: userCode,
+          language: task.language || 'python',
+          expected_output: correctCode,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        console.warn('❌ Ошибка компиляции:', data.error);
+        setOutput(data.error || '');
+      } else {
+        setOutput(data.output || '');
+      }
+
+      isCorrect = data.isCorrect;
+      console.log('✅ [code] isCorrect:', isCorrect);
+    } catch (err) {
+      console.error('❌ Ошибка сети при компиляции:', err);
+      alert('❌ Ошибка соединения с сервером');
+      return;
+    }
   }
 
-  console.log('🔍 [handleCustomTaskSubmit] ✅');
-  console.log('taskIndex:', taskIndex);
-  console.log('task.type:', task.type);
-  console.log('userAnswers[taskIndex]:', userAnswers[taskIndex]);
-  console.log('userAnswers (stringified):', JSON.stringify(userAnswers[taskIndex]));
-  console.log('correct_answers:', task.correct_answers);
-  console.log('isCorrect:', isCorrect);
-
-  if (!isCorrect) {
-    console.log('❌ НЕСОВПАДЕНИЕ');
+  // ✅ Сохраняем баллы только если верно
+  if (isCorrect) {
+    try {
+      await fetch('http://localhost:5000/api/custom-progress/add-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          lesson_id: lesson.lesson_id,
+          task_id: task.task_id,
+          isCorrect: true,
+        }),
+      });
+      console.log('✅ Баллы начислены');
+    } catch (err) {
+      console.warn('⚠️ Не удалось сохранить баллы:', err);
+    }
   }
 
-  // Обновляем попытки
+  // Обновляем попытки (даже если неверно)
   setAttempts(prev => ({ ...prev, [taskIndex]: currentAttempts + 1 }));
 
   // Определяем результат
-  let newResult;
-  if (isCorrect) {
-    newResult = 'correct';
-  } else if (currentAttempts + 1 >= 3) {
-    newResult = 'failed';
-  } else {
-    newResult = 'wrong';
-  }
+  const newResult = isCorrect 
+    ? 'correct'
+    : currentAttempts + 1 >= 3 
+      ? 'failed' 
+      : 'wrong';
 
-  setResults(prev => ({ ...prev, [taskIndex]: newResult }));
+  setResults(prev => ({
+    ...prev,
+    [taskIndex]: newResult
+  }));
+
+  // 🚀 Дальнейшие действия
+  if (isCorrect) {
+    // Если это **последнее задание**, то завершаем урок
+    if (taskIndex === tasks.length - 1) {
+      await completeLesson();
+      setCurrentTaskIndex(tasks.length); // ← это вызовет рендеринг else-блока { ... } : ( ✅ Все задания пройдены )
+      return;
+    }
+
+    // Иначе переходим к следующему
+    setCurrentTaskIndex(prev => prev + 1);
+    setCode('');
+  }
 };
 
 const nextTask = () => {
@@ -214,19 +298,49 @@ const nextTask = () => {
   }
 };
 
+const completeLesson = async () => {
+  if (!userId || !lesson?.lesson_id) return;
+
+  try {
+    const res = await fetch('http://localhost:5000/api/custom-progress/complete', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        lesson_id: lesson.lesson_id,
+      }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      console.error('❌ Ошибка завершения урока:', errorData.message);
+      alert('❌ Не удалось сохранить завершение урока');
+    } 
+  } catch (err) {
+    console.error('Ошибка сети:', err);
+    alert('❌ Ошибка соединения с сервером');
+  }
+};
+
 const restartLesson = () => {
-  setCurrentTaskIndex(0);
-  setCode('');
-  setAttempts({});
-  setResults({});
+  // Сбросить всё как при первом старте
+  const initAnswers = {};
   const initAttempts = {};
   const initResults = {};
+
   tasks.forEach((task, i) => {
+    initAnswers[i] = task.type === 'multiple' ? [] : null;
     initAttempts[i] = 0;
     initResults[i] = null;
   });
+
+  setUserAnswers(initAnswers);
   setAttempts(initAttempts);
   setResults(initResults);
+  setCurrentTaskIndex(0);
+  setCode('');
+  setOutput('');
+  setIsRunning(false);
   setShowTasks(false);
 };
 
@@ -716,25 +830,24 @@ if (taskType === 'single') {
         </>
       ) : (
         // ✅ Все задания пройдены
-        <div className="flex flex-col items-center justify-center h-full text-center space-y-8">
-          <div className="text-8xl">🏆</div>
-          <h2 className="text-4xl font-bold text-green-400">Урок завершён!</h2>
-          <p className="text-gray-300 text-lg">Поздравляем, вы успешно прошли все задания.</p>
-          <div className="flex gap-6 mt-6">
-            <button
-              onClick={restartLesson}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition"
-            >
-              Пройти заново
-            </button>
-            <button
-              onClick={goToLessons}
-              className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition"
-            >
-              Вернуться к урокам
-            </button>
-          </div>
-        </div>
+        <div className="flex gap-6 mt-6">
+  <button
+    onClick={async () => {
+      restartLesson();
+    }}
+    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition"
+  >
+    Пройти заново
+  </button>
+  <button
+    onClick={async () => {
+      goToLessons();
+    }}
+    className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition"
+  >
+    Вернуться к урокам
+  </button>
+</div>
       )}
     </div>
   )}

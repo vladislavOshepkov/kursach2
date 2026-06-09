@@ -4,8 +4,6 @@ import pool from '../config/db.js';
 const router = express.Router();
 
 router.get('/', async (req, res) => {
-  const { courseId } = req.params;
-
   try {
     const result = await pool.query(`
       SELECT 
@@ -18,7 +16,7 @@ router.get('/', async (req, res) => {
     `);
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Уроки не найдены для этого курса' });
+      return res.status(404).json({ message: 'Курсы не найдены' });
     }
 
     res.json(result.rows);

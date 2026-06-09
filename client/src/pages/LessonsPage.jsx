@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 
 const HomeIcon = () => (
@@ -22,6 +22,7 @@ const CheckIcon = () => (
 
 export default function LessonsPage() {
   const { courseId } = useParams();
+  const location = useLocation();
   const [lessons, setLessons] = useState([]);
   const [progress, setProgress] = useState({}); // ← Храним прогресс: { lessonId: true/false }
   const [loading, setLoading] = useState(true);

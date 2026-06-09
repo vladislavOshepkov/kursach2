@@ -45,7 +45,7 @@ router.get('/:id', async (req, res) => {
 
 // PUT /custom-lessons/:id
 router.put('/:id', async (req, res) => {
-  const { lesson_title, lesson_description, lesson_content, lesson_estimated_time } = req.body;
+  const { lesson_title, lesson_description, lesson_content, lesson_estimated_time, attempt_mode, max_attempts, show_count } = req.body;
   const lessonId = req.params.id;
 
   try {
@@ -60,7 +60,7 @@ SET lesson_title = $1,
     show_count = COALESCE($7, show_count)
 WHERE lesson_id = $8
 RETURNING *`,
-      [lesson_title, lesson_description, lesson_content, lesson_estimated_time, lessonId]
+      [lesson_title, lesson_description, lesson_content, lesson_estimated_time, attempt_mode, max_attempts, show_count, lessonId]
     );
 
     if (result.rows.length === 0) {

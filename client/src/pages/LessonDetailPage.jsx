@@ -13,7 +13,7 @@ export default function LessonDetailPage() {
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState({}); // Ответы на вопросы
 
-  // Для редактора кода
+  // Для редактора к��да
   const [code, setCode] = useState('');
   const [attempts, setAttempts] = useState({});
   const [results, setResults] = useState({});
@@ -181,7 +181,13 @@ useEffect(() => {
   };
 
   const handleRun = async () => {
-  if (!code.trim() || isRunning || result === 'correct' || userAttempts >= 3) return;
+  if (!code.trim() || isRunning) return;
+
+  const currentTask = tasks[currentTaskIndex];
+  const userAttempts = attempts[currentTaskIndex] || 0;
+  const result = results[currentTaskIndex];
+
+  if (result === 'correct' || userAttempts >= 3) return;
 
   setIsRunning(true);
   setOutput('');
@@ -244,7 +250,8 @@ useEffect(() => {
   } finally {
     setIsRunning(false);
   }
-}; // ← Только одна закрывающая скобка и точка с запятой
+};
+
   if (loading) return <div className="text-white">Загрузка...</div>;
   if (!lesson) return <div className="text-red-400">Урок не найден</div>;
 

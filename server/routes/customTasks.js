@@ -1,6 +1,7 @@
 import express from 'express';
 const router = express.Router();
 import pool from '../config/db.js';
+import { compileCode } from '../services/compiler.js';
 
 // POST /api/custom-tasks — создание задания
 router.post('/', async (req, res) => {
@@ -142,6 +143,55 @@ router.put('/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Ошибка при обновлении задания' });
+  }
+});
+
+// POST /api/custom-tasks/check — аналог /api/tasks/check для user-generated tasks
+router.post('/check', async (req, res) => {
+  const { code, language, task_type, expected_output } = req.body;
+
+  if (!code || !language) {
+    return res.status(400).json({ error: 'Требуется code и language' });
+  }
+
+  const normalize = (str) => str?.replace(/[\r\n]+/g, '').trim();
+
+  try {
+    // 🔁 Используем compileCode — уже работает в Docker
+    const compileResult = await compileCode(code.trim(), language);
+
+    if (compileResult.error) {
+      return res.json({
+        success: false,
+        output: null,
+        error: `Ошибка компиляции: ${compileResult.error}`,
+        isCorrect: false,
+      });
+    }
+
+    if (compileResult.stderr) {
+      console.warn('⚠️stderr:', compileResult.stderr);
+      // НЕ останавливаем выполнение — возможно вывод в stderr
+    }
+
+    const actualOutput = normalize(compileResult.stdout);
+    const expectedTrimmed = normalize(expected_output || '');
+
+    const isCorrect = actualOutput === expectedTrimmed;
+
+    res.json({
+      success: true,
+      output: compileResult.stdout,
+      error: null,
+      isCorrect,
+    });
+  } catch (err) {
+    console.error('❌ Ошибка при проверке пользовательского кода:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Ошибка сервера',
+      isCorrect: false,
+    });
   }
 });
 
