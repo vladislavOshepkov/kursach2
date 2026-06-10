@@ -3,9 +3,10 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import pool from '../config/db.js';
 import dotenv from 'dotenv';
+import { JWT_SECRET } from '../config/jwt.js';
 
 dotenv.config();
-const JWT_SECRET = process.env.JWT_SECRET;
+//const JWT_SECRET = process.env.JWT_SECRET;
 
 const router = express.Router();
 
@@ -92,7 +93,7 @@ router.post('/login', async (req, res) => {
     try {
       token = jwt.sign(
         { id: user.user_id, role: user.role_id },
-        process.env.JWT_SECRET,
+        JWT_SECRET,
         { expiresIn: '24h' }
       );
     } catch (err) {

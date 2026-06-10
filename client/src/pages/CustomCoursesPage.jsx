@@ -8,6 +8,7 @@ export default function CustomCoursesPage() {
   const [userRole, setUserRole] = useState('1');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showMyCourses, setShowMyCourses] = useState(false);
+  
 
   // 🔎 Фильтры
   const [searchTerm, setSearchTerm] = useState('');
@@ -268,6 +269,8 @@ function CreateCourseModal({ onClose, onSuccess }) {
     course_description: '',
     course_icon_url: '/icons/course-default.svg',
     course_tags: '',
+    is_private: false,
+    password: '',
   });
   const [fileToUpload, setFileToUpload] = useState(null); // ✅ Добавлено сюда
   const [error, setError] = useState('');
@@ -279,56 +282,70 @@ function CreateCourseModal({ onClose, onSuccess }) {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setError('');
+  e.preventDefault();
+  setIsSubmitting(true);
+  setError('');
 
-    const tags = formData.course_tags
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter((tag) => tag);
+  const tags = formData.course_tags
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag);
 
-    const userId = localStorage.getItem('userId');
-    if (!userId) {
-      setError('❌ Пользователь не авторизован');
+  const userId = localStorage.getItem('userId');
+  if (!userId) {
+    setError('❌ Пользователь не авторизован');
+    setIsSubmitting(false);
+    return;
+  }
+
+  const formDataToSend = new FormData();
+  formDataToSend.append('course_title', formData.course_title);
+  formDataToSend.append('course_description', formData.course_description);
+  formDataToSend.append('user_id', userId);
+  tags.forEach(tag => {
+    formDataToSend.append('course_tags', tag);
+  });
+
+  // 🔐 Поддержка закрытых курсов
+  if (formData.is_private) {
+    formDataToSend.append('is_private', 'true');
+    if (!formData.password) {
+      setError('❌ Пароль обязателен для закрытого курса');
       setIsSubmitting(false);
       return;
     }
+    formDataToSend.append('password', formData.password);
+  }
 
-    const formDataToSend = new FormData();
-formDataToSend.append('course_title', formData.course_title);
-formDataToSend.append('course_description', formData.course_description);
-formDataToSend.append('user_id', userId);
-tags.forEach(tag => {
-  formDataToSend.append('course_tags', tag);
-});
-if (fileToUpload) {
-  formDataToSend.append('course_icon', fileToUpload);
-}
+  // 📎 Иконка курса
+  if (fileToUpload) {
+    formDataToSend.append('course_icon', fileToUpload);
+  }
 
-    try {
-      const res = await fetch(`http://localhost:5000/api/custom-courses`, {
-  method: 'POST',
-  headers: {
-    Authorization: `Bearer ${localStorage.getItem('token')}`,
-  },
-  body: formDataToSend,
-});
+  try {
+    const res = await fetch(`http://localhost:5000/api/custom-courses`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        // ❌ Не устанавливайте Content-Type для FormData! Он установится автоматически.
+      },
+      body: formDataToSend,
+    });
 
-      const data = await res.json();
+    const data = await res.json();
 
-      if (res.ok) {
-        onSuccess();
-        onClose();
-      } else {
-        throw new Error(data.message || 'Не удалось создать курс');
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsSubmitting(false);
+    if (res.ok) {
+      onSuccess();
+      onClose();
+    } else {
+      throw new Error(data.message || 'Не удалось создать курс');
     }
-  };
+  } catch (err) {
+    setError(err.message);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
@@ -395,6 +412,47 @@ if (fileToUpload) {
       alt="Предпросмотр иконки"
       className="w-16 h-16 object-cover rounded-lg border border-gray-600"
     />
+  </div>
+)}
+{/* 🔐 Тип курса (открытый/закрытый) */}
+<div className="flex items-center space-x-3 my-4">
+  <label className="flex items-center">
+    <input
+      type="radio"
+      name="privacy"
+      checked={!formData.is_private}
+      onChange={() => setFormData(prev => ({ ...prev, is_private: false }))}
+      className="w-4 h-4 text-blue-600"
+    />
+    <span className="ml-2 text-gray-300">Открытый</span>
+  </label>
+  <label className="flex items-center">
+    <input
+      type="radio"
+      name="privacy"
+      checked={formData.is_private}
+      onChange={() => setFormData(prev => ({ ...prev, is_private: true }))}
+      className="w-4 h-4 text-purple-600"
+    />
+    <span className="ml-2 text-gray-300">Закрытый (по паролю)</span>
+  </label>
+</div>
+
+{/* 🔐 Пароль (только если закрытый) */}
+{formData.is_private && (
+  <div>
+    <label className="block text-sm font-medium text-gray-300 mb-1">Пароль для доступа</label>
+    <input
+      type="password"
+      value={formData.password}
+      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
+      placeholder="Введите пароль..."
+      required={formData.is_private}
+    />
+    <p className="text-xs text-gray-400 mt-1">
+      Пользователи смогут записаться только после ввода пароля.
+    </p>
   </div>
 )}
 
